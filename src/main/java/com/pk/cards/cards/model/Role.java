@@ -1,6 +1,6 @@
 package com.pk.cards.cards.model;
 
 public enum Role {
-    ADMIN,
-    MEMBER
+    ROLE_ADMIN,
+    ROLE_MEMBER
 }

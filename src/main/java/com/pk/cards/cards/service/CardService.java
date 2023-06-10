@@ -7,10 +7,10 @@ import com.pk.cards.cards.model.User;
 import com.pk.cards.cards.repository.CardRepository;
 import com.pk.cards.cards.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -46,12 +46,10 @@ public class CardService {
     public List<CardDTO> searchCards(@RequestBody CardSearchCriteria searchCriteria) {
         Sort sort = Sort.by(Sort.Direction.fromString(searchCriteria.getSortOrder()), searchCriteria.getSortBy());
 
-        List<Card> cards = cardRepository.findByUserIdAndNameContainingIgnoreCaseAndColorContainingIgnoreCaseAndStatusContainingIgnoreCaseAndCreationDateGreaterThanEqual(
+        List<Card> cards = cardRepository.findCardsWithFilters(
                 getUserId(), searchCriteria.getName(), searchCriteria.getColor(), searchCriteria.getStatus(),
                 searchCriteria.getCreationDate(), searchCriteria.getPageable(sort));
-
         // Map Card entities to CardDTOs
-
         return cards.stream()
                 .map(CardDTO::fromCard)
                 .collect(Collectors.toList());
@@ -66,29 +64,55 @@ public class CardService {
         User user = userRepository.findById(getUserId())
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
         Optional<Card> optionalCard = Optional.ofNullable(cardRepository.findByIdAndUser(cardId, user));
-        if (optionalCard.isPresent()) {
-            Card card = optionalCard.get();
-            return card;
-        } else {
-            return null;
-        }
+        return optionalCard.orElse(null);
     }
 
     public Card getCardById(int cardId) {
         // Implement the logic to retrieve the card by ID
-        Card card = cardRepository.findById(cardId).orElse(null);
-        if (card != null) {
-            return card;
-        }
-        return null;
+        return cardRepository.findById(cardId).orElse(null);
     }
 
     public Card getCardByUserAndId(String userEmail, int cardId) {
         // Implement the logic to retrieve the card by user email and ID
-        Card card = cardRepository.findByUserEmailAndId(userEmail, cardId);
-        if (card != null) {
-            return card;
+        return cardRepository.findByUserEmailAndId(userEmail, cardId);
+    }
+
+    public ResponseEntity<Card> getCardData(Authentication authentication, String userEmail, int cardId) {
+
+        // Check the user's role to determine the access level
+        if (authentication.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_ADMIN"))) {
+            // Admin can access any card
+            Card cardDTO = getCardById(cardId);
+            return ResponseEntity.ok(cardDTO);
+        } else {
+            // Member can access only their own cards
+            Card cardDTO = getCardByUserAndId(userEmail, cardId);
+            if (cardDTO != null) {
+                return ResponseEntity.ok(cardDTO);
+            } else {
+                return ResponseEntity.notFound().build();
+            }
         }
-        return null;
+    }
+
+    public void updateCard(Card card, Card updateCardRequest) {
+        if (updateCardRequest.getName() != null) {
+            card.setName(updateCardRequest.getName());
+        }
+        if (updateCardRequest.getDescription() != null) {
+            card.setDescription(updateCardRequest.getDescription());
+        }
+        if (updateCardRequest.getColor() != null) {
+            card.setColor(updateCardRequest.getColor());
+        }
+        if (updateCardRequest.getStatus() != null) {
+            card.setStatus(updateCardRequest.getStatus());
+        }
+
+        cardRepository.save(card);
+    }
+
+    public void deleteCard(Card card) {
+        cardRepository.delete(card);
     }
 }
